@@ -1,0 +1,221 @@
+#installXLSXsupport(perl="C:/Program Files/bin/perl.exe")
+#install.packages("randomForest")
+#install.packages("gdata")
+
+#______________________________Code for the Random Forest generation_________________________________________
+  
+#Determine the working directory
+getwd()
+
+#Change the working directory to point to the location where the data files are stored
+setwd('C:\\Moksha\\MICA\\PGP2\\AMMA\\Data')
+
+
+# relevant packages for random forest functions and input/output orerations respectively
+# Stored the file in an excel sheet named data
+
+library(randomForest)
+library(gdata)
+#Invoking the relevant libraries installed above
+
+mb<-read.csv("train.csv")
+#R imports and stores the data in a data frame called "mb"
+# Now we begin the process of data cleaning and preparation for applying Random Forests
+
+
+#*******************************************Code for Data Exploration *****************************************************
+#structure  of the data file imported
+str(mb)
+
+#Event Rate in the data
+sum(mb$Target)/nrow(mb)
+
+# subset into continous
+cont<-subset(mb,select=-c(id))
+
+#more detailed exploration
+z<-cont
+z<-cont
+for (i in 1:ncol(z)) 
+{
+ zed1<-t(as.data.frame(quantile(z[,i],prob=c(0,0.05,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95,0.98,0.99,0.999,1),na.rm=T)))
+  row.names(z1)[1]<-colnames(z)[i]
+  total<-nrow(z)
+  total_miss<-sum(is.na(z[,i]))
+ zed1<-cbind(z1,total,total_miss)
+  if (i==1) y<-z1 else y<-rbind(y,z1)
+}
+
+write.csv(y,"univ_cont.csv")
+
+
+#missing value treatment
+sum(is.na(mb$x1))
+mb$x1 <- ifelse(is.na(mb$x1),mb$x5-mb$x3,mb$x1)
+sum(is.na(mb$x1))
+
+mb$x29 <- ifelse(is.na(mb$x29),0,mb$x29)
+mb$x30 <- ifelse(is.na(mb$x30),0,mb$x30)
+mb$x31 <- ifelse(is.na(mb$x31),0,mb$x31)
+mb$x33 <- ifelse(is.na(mb$x33),0,mb$x33)
+mb$x35 <- ifelse(is.na(mb$x35),0,mb$x35)
+mb$x38 <- ifelse(is.na(mb$x38),0,mb$x38)
+
+#recheck 
+
+z<-mb
+for (i in 1:ncol(z)) 
+{
+  total<-nrow(z)
+  total_miss<-sum(is.na(z[,i]))
+ zed1<-cbind(colnames(z)[i],total,total_miss)
+  if (i==1) y<-z1 else y<-rbind(y,z1)
+}
+
+write.csv(y,"missing_check.csv")
+
+
+#**************************************************Modeling Process******************************************************
+  
+mb<-read.csv("train.csv")
+
+#structure 
+mb$x39<-as.factor(mb$x39)
+mb$Target<-as.factor(mb$Target)
+mb$x1 <- ifelse(is.na(mb$x1),mb$x5-mb$x3,mb$x1)
+mb$x29 <- ifelse(is.na(mb$x29),0,mb$x29)
+mb$x30 <- ifelse(is.na(mb$x30),0,mb$x30)
+mb$x31 <- ifelse(is.na(mb$x31),0,mb$x31)
+mb$x33 <- ifelse(is.na(mb$x33),0,mb$x33)
+mb$x35 <- ifelse(is.na(mb$x35),0,mb$x35)
+mb$x38 <- ifelse(is.na(mb$x38),0,mb$x38)
+mb_tree<-subset(mb,select=-c(x39,id))
+
+
+#split the dataset into development and validation
+set.seed(100)
+tot<-nrow(mb_tree)
+data_kec<-as.integer(0.7*tot)
+data_k<-sample(tot,data_kec)
+dev<-mb_tree[data_k,]
+val<-mb_tree[-data_k,]
+
+#random forest setup
+x<-subset(dev,select=-c(Target))
+y<-dev$Target
+
+#**************************************Random Forest Model Build*************************************************
+library(randomForest)
+rf<-randomForest(x,y,mtry=6,ntry=500,importance=TRUE)
+
+bestmtry<- tuneRF(x,y,ntreeTry=500,stepFactor=1.5, improve=0.05,trace=TRUE, plot=TRUE,dobest=FALSE)
+
+rf<-randomForest(x,y,mtry=4,ntry=500,importance=TRUE, probability=TRUE)
+
+importance(rf)
+varImpPlot(rf)
+
+# Estimates for importance of individual attributes in the analysis
+
+#******************************************Model Assessment - Confusion Matrix ************************************
+  
+  predict <- predict(rf, val, type='response')
+# Computes predicted values of income for all input vectors in the validation dataset
+
+table(predict,val$Target)
+# Computes confusion matrix for the predicted values in the test dataset
+
+#oob rate
+
+#Three types of prediction 
+dev_oob<-predict(rf,type="prob")
+dev_prob<-predict(rf,dev,type="prob")
+val_prob<-predict(rf,val,type="prob")
+
+#**************************************Model Assessment - Area Under Curve****************************
+  
+#auc 
+  
+class_data<-as.data.frame(dev_oob)
+prob_mb<-cbind(as.numeric(levels(dev$Target))[dev$Target],class_data)
+colnames(prob_mb)[1]<-"Target"
+colnames(prob_mb)[2]<-"prob_0"
+colnames(prob_mb)[3]<-"prob_1"
+library(ROCR)
+
+pred<-prediction(prob_mb$prob_1,prob_mb$Target)
+auc <- performance(pred,"auc")
+as.numeric(auc@y.values)
+
+#auc - dev model
+class_data<-as.data.frame(dev_prob)
+prob_mb<-cbind(as.numeric(levels(dev$Target))[dev$Target],class_data)
+colnames(prob_mb)[1]<-"Target"
+colnames(prob_mb)[2]<-"prob_0"
+colnames(prob_mb)[3]<-"prob_1"
+library(ROCR)
+
+pred<-prediction(prob_mb$prob_1,prob_mb$Target)
+auc <- performance(pred,"auc")
+as.numeric(auc@y.values)
+
+#auc - val
+val_class<-as.data.frame(val_prob)
+prob_mb<-cbind(as.numeric(levels(val$Target))[val$Target],val_class)
+colnames(prob_mb)[1]<-"Target"
+colnames(prob_mb)[2]<-"prob_0"
+colnames(prob_mb)[3]<-"prob_1"
+library(ROCR)
+
+pred<-prediction(prob_mb$prob_1,prob_mb$Target)
+auc <- performance(pred,"auc")
+as.numeric(auc@y.values)
+
+#************************Model Assessment - Concordance**************************************************
+  fastConc<-function(model){
+    # Get all actual observations and their fitted values into a frame
+    fitted<-data.frame(cbind(prob_mb$Target,prob_mb$prob_1))
+    colnames(fitted)<-c('respvar','score')
+    # Subset only ones
+    ones<-fitted[fitted[,1]==1,]
+    # Subset only zeros
+    zeros<-fitted[fitted[,1]==0,]
+    
+    # Initialise all the values
+    pairs_tested<-nrow(ones)*nrow(zeros)
+    conc<-0
+    disc<-0
+    
+    # Get the values in a for-loop
+    for(i in 1:nrow(ones))
+    {
+      conc<-conc + sum(ones[i,"score"]>zeros[,"score"])
+      disc<-disc + sum(ones[i,"score"]<zeros[,"score"])
+    }
+    # Calculate concordance, discordance and ties
+    concordance<-conc/pairs_tested
+    discordance<-disc/pairs_tested
+    ties_perc<-(1-concordance-discordance)
+    return(list("Concordance"=concordance,
+                "Discordance"=discordance,
+                "Tied"=ties_perc,
+                "Pairs"=pairs_tested))
+  }
+
+fastConc() 
+
+#********************Model Assessment - KS Statistics / Rank Ordering *************************************
+  
+prob_mb<-prob_mb[order(-rank(prob_mb$prob_1)),]
+breaks<-unique(quantile(prob_mb$prob_1, probs=c(0:10/10)))
+cnt<-length(breaks)-1
+c<-cut(prob_mb$prob_1, breaks=breaks, labels=1:cnt,include.lowest=TRUE)
+prob_mb<-cbind(prob_mb,c)
+
+library(sqldf)
+final<-sqldf('select c, count(*) as total, sum(Target) as events,
+            sum(prob_1) as sum_prob
+            from prob_mb group by c')
+
+write.csv(final,"mod_out.csv")
+
