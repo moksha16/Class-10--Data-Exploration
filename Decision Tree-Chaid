@@ -1,0 +1,37 @@
+# -------------------- Decision Tree: CHAID ----------------------------------#
+install.packages("libcoin")
+install.packages("partykit")
+install.packages("CHAID", repos="http://R-Forge.R-project.org")
+library(CHAID)
+library(help=CHAID)
+chaid_dt <- read.csv("http://dni-institute.in/blogs/wp-content/uploads/2017/07/dt_data.csv")
+
+# find uniqueue values
+unique_last_month <- sort(uniqueue(chaid_dt$Last_Month_spend))
+unique_last3_month <- sort(uniqueue(chaid_dt$Last_3m_avg_spend))
+# Split points
+split_point_lm <- vector()
+for (i in 1:(length(unique_last_month)-1)){
+  split_point_lm[i] <- (unique_last_month[i]+unique_last_month[i+1])/2
+}
+split_point_l3m <- vector()
+for (i in 1:(length(unique_last3_month)-1)){
+  split_point_l3m[i] <- (unique_last3_month[i]+unique_last3_month[i+1])/2
+}
+
+# Factor Variables
+chaid_dt$Last_Month_spend_cut <- cut(chaid_dt$Last_Month_spend,
+                                          breaks = c(0,100,350,750,850,950,2000),
+                         include.lowest=T)
+chaid_dt$Last_3m_avg_spend_cut <- cut(chaid_dt$Last_3m_avg_spend,
+                                          breaks = c(0,100,350,750,850,950,2000),
+                                          include.lowest=T)
+
+
+chaid <- chaid(as.factor(Spend_Drop_over50pct)~Gender+Education_level+
+                 Last_Month_spend_cut+
+                 Last_3m_avg_spend_cut,
+               data=chaid_dt)
+plot(chaid) 
+
+table(chaid_dt$Last_Month_spend_cut)
